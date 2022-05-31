@@ -236,6 +236,71 @@ class Atari:
     return self._env.close()
 
 
+class PlayRoom:
+
+  LOCK = threading.Lock()
+
+  def __init__(self, args):
+    from library.envs.playground_env_update import PlayGroundEnv
+    # M: careful! if success reward is a float, this breaks
+    env_kwargs = dict(time_penalty=0, early_done_penalty=0, success_reward=1)
+    self._env = PlayGroundEnv(render=False, seed=args.seed, num_drawers=3, verbose=False,
+                                show_goal=False, initial_object_options=[0,1,2,3],
+                                goal_object_options=[0,1,2,3], drawers_options=[1,2,3], **env_kwargs)
+    self.state_keys = ['observation_grasp', 'desired_goal']
+    self.shape = (sum([self._env.observation_space[k].shape[0] for k in self.state_keys]),)
+
+  @property
+  def obs_space(self):
+    return {
+        'state': gym.spaces.Box(-np.inf, np.inf, self.shape, dtype=np.float32),
+        'reward': gym.spaces.Box(-np.inf, np.inf, (), dtype=np.float32),
+        'is_first': gym.spaces.Box(0, 1, (), dtype=np.bool),
+        'is_last': gym.spaces.Box(0, 1, (), dtype=np.bool),
+        'is_terminal': gym.spaces.Box(0, 1, (), dtype=np.bool),
+    }
+
+  @property
+  def act_space(self):
+    return {'action': gym.spaces.Discrete(10)}
+
+  def step(self, action):
+    map_actions = {
+      0: 'goal',
+      1: 'door',
+      2: 'drawer1',
+      3: 'drawer2',
+      4: 'drawer3',
+      5: 'o',
+      6: 'p',
+      7: 's',
+      8: 'reset',
+      9: 'gr'
+    }
+    state, reward, done, info = self._env.step(map_actions[action['action']])
+    return {
+        'state': np.concatenate([state[k] for k in self.state_keys]),
+        'reward': reward,
+        'is_first': False,
+        'is_last': done,
+        'is_terminal': done,
+    }
+
+  def reset(self):
+    with self.LOCK:
+      state = self._env.reset()
+    return {
+        'state': np.concatenate([state[k] for k in self.state_keys]),
+        'reward': 0.0,
+        'is_first': True,
+        'is_last': False,
+        'is_terminal': False,
+    }
+
+  def close(self):
+    return self._env.close()
+
+
 class Crafter:
 
   def __init__(self, outdir=None, reward=True, seed=None):

@@ -91,6 +91,9 @@ def main():
       reward = bool(['noreward', 'reward'].index(task)) or mode == 'eval'
       env = common.Crafter(outdir, reward)
       env = common.OneHotAction(env)
+    elif suite == 'playroom':
+      env = common.PlayRoom(config)      
+      env = common.OneHotAction(env)
     else:
       raise NotImplementedError(suite)
     env = common.TimeLimit(env, config.time_limit)
@@ -110,7 +113,7 @@ def main():
       if re.match(config.log_keys_max, key):
         logger.scalar(f'max_{mode}_{key}', ep[key].max(0).mean())
     should = {'train': should_video_train, 'eval': should_video_eval}[mode]
-    if should(step):
+    if should(step) and config.log_video:
       for key in config.log_keys_video:
         logger.video(f'{mode}_policy_{key}', ep[key])
     replay = dict(train=train_replay, eval=eval_replay)[mode]

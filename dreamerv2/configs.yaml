@@ -22,6 +22,7 @@ defaults:
   expl_until: 0
   replay: {capacity: 2e6, ongoing: False, minlen: 50, maxlen: 50, prioritize_ends: True}
   dataset: {batch: 16, length: 50}
+  log_video: True
   log_keys_video: ['image']
   log_keys_sum: '^$'
   log_keys_mean: '^$'
@@ -99,6 +100,36 @@ atari:
   discount: 0.999
   loss_scales.kl: 0.1
   loss_scales.discount: 5.0
+
+playroom:
+
+  task: playroom_playroom
+  encoder: {mlp_keys: '.*', cnn_keys: '$^'}
+  decoder: {mlp_keys: '.*', cnn_keys: '$^'}
+  time_limit: 200  # from Generalising
+  steps: 5e6
+  action_repeat: 1
+  eval_every: 1e4
+  prefill: 2000  # try 1000
+  clip_rewards: identity # try 'tanh'
+  pred_discount: False # try True
+  replay.prioritize_ends: False # try True
+  grad_heads: [decoder, reward] # try adding 'discount'
+  rssm: {hidden: 200, deter: 200} # try 600, 600
+  model_opt.lr: 3e-4  # or 2e-4 for atari
+  actor_opt.lr: 8e-5  # or 4e-5 in atari
+  critic_opt.lr: 8e-5  # or 1e-4 in atari
+  actor_ent: 1e-4  # or 1e-3 in atari
+  kl.free: 1.0  # ? from dm_control
+  replay: {minlen: 5, maxlen: 30}  # probably helps since episodes are shorter
+  dataset: {batch: 128, length: 5}
+  log_video: False
+
+  # discount: 0.999  # to try from atari
+  # loss_scales.kl: 0.1  # to try from atari
+  # loss_scales.discount: 5.0  # to try from atari
+  # pretrain: 100  # try from dm_control
+
 
 crafter:
 
