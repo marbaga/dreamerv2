@@ -37,6 +37,7 @@ defaults:
   eval_noise: 0.0
   eval_state_mean: False
   goal_conditioned: False
+  proj_goal: False
 
   # World Model
   grad_heads: [decoder, reward, discount]
@@ -126,6 +127,7 @@ playroom:
   dataset: {batch: 128, length: 5}
   log_video: False
   goal_conditioned: False
+  proj_goal: False
   # TODO: some episodes are len 4, lower minlen
   # expl_behavior: PlanToExplore
   # discount: 0.999  # to try from atari

@@ -314,6 +314,29 @@ class MLP(common.Module):
     return self.get('out', DistLayer, self._shape, **self._out)(x)
 
 
+class GoalCondMLP(common.Module):
+
+  def __init__(self, shape, layers, units, act='elu', norm='none', **out):
+    self._shape = (shape,) if isinstance(shape, int) else shape
+    self._layers = layers
+    self._units = units
+    self._norm = norm
+    self._act = get_act(act)
+    self._out = out
+
+  def __call__(self, features):
+    features = tuple([tf.cast(f, prec.global_policy().compute_dtype) for f in features])
+    x, y = tuple([f.reshape([-1, f.shape[-1]]) for f in features])
+    y = self.get('proj', tfkl.Dense, x.shape[-1])(y)
+    x = tf.concat([x, y], -1)
+    for index in range(self._layers):
+      x = self.get(f'dense{index}', tfkl.Dense, self._units)(x)
+      x = self.get(f'norm{index}', NormLayer, self._norm)(x)
+      x = self._act(x)
+    x = x.reshape(features[0].shape[:-1] + [x.shape[-1]])
+    return self.get('out', DistLayer, self._shape, **self._out)(x)
+
+
 class GRUCell(tf.keras.layers.AbstractRNNCell):
 
   def __init__(self, size, norm=False, act='tanh', update_bias=-1, **kwargs):

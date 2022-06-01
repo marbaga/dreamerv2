@@ -38,7 +38,9 @@ class Agent(common.Module):
         latent, action, embed, obs['is_first'], sample)
     feat = self.wm.rssm.get_feat(latent)
     if self.config.goal_conditioned:
-      feat = tf.concat([feat, tf.cast(obs['goal'], feat.dtype)], -1)
+      feat = (feat, tf.cast(obs['goal'], feat.dtype))
+      if not self.config.proj_goal:
+        feat = tf.concat(feat, -1)
     if mode == 'eval':
       actor = self._task_behavior.actor(feat)
       action = actor.mode()
@@ -92,9 +94,10 @@ class WorldModel(common.Module):
     self.encoder = common.Encoder(shapes, **config.encoder)
     self.heads = {}
     self.heads['decoder'] = common.Decoder(shapes, **config.decoder)
-    self.heads['reward'] = common.MLP([], **config.reward_head)
+    arch = common.GoalCondMLP if (self.config.goal_conditioned and self.config.proj_goal) else common.MLP
+    self.heads['reward'] = arch([], **config.reward_head)
     if config.pred_discount:
-      self.heads['discount'] = common.MLP([], **config.discount_head)
+      self.heads['discount'] = arch([], **config.discount_head)
     for name in config.grad_heads:
       assert name in self.heads, name
     self.model_opt = common.Optimizer('model', **config.model_opt)
@@ -120,7 +123,9 @@ class WorldModel(common.Module):
       grad_head = (name in self.config.grad_heads)
       inp = feat if grad_head else tf.stop_gradient(feat)
       if self.config.goal_conditioned and name in ['reward', 'discount']:
-        inp = tf.concat([inp, tf.cast(data['goal'], inp.dtype)], -1)
+        inp = (inp, tf.cast(data['goal'], inp.dtype))
+        if not self.config.proj_goal:
+          inp = tf.concat(inp, -1)
       out = head(inp)
       dists = out if isinstance(out, dict) else {name: out}
       for key, dist in dists.items():
@@ -144,17 +149,24 @@ class WorldModel(common.Module):
     start = {k: flatten(v) for k, v in start.items()}
     start['feat'] = self.rssm.get_feat(start)
     if self.config.goal_conditioned:
-      p_input = tf.concat([start['feat'], start['goal']], -1)
+      p_input = (start['feat'], start['goal'])
+      if not self.config.proj_goal:
+        p_input = tf.concat(p_input, -1)
     else:
       p_input = start['feat']
     start['action'] = tf.zeros_like(policy(p_input).mode())
     seq = {k: [v] for k, v in start.items()}
     for _ in range(horizon):
       if self.config.goal_conditioned:
-        p_input = tf.concat([seq['feat'][-1], start['goal']], -1)
+        p_input = (seq['feat'][-1], start['goal'])
+        if not self.config.proj_goal:
+          p_input = tf.concat(p_input, -1)
       else:
         p_input = seq['feat'][-1]
-      action = policy(tf.stop_gradient(p_input)).sample()
+      if self.config.goal_conditioned and self.config.proj_goal:
+        action = policy(tuple([tf.stop_gradient(p_i) for p_i in p_input])).sample()
+      else:
+        action = policy(tf.stop_gradient(p_input)).sample()
       state = self.rssm.img_step({k: v[-1] for k, v in seq.items()}, action)
       feat = self.rssm.get_feat(state)
       for key, value in {**state, 'action': action, 'feat': feat}.items():
@@ -162,7 +174,9 @@ class WorldModel(common.Module):
     seq = {k: tf.stack(v, 0) for k, v in seq.items()}
     if self.config.goal_conditioned:
       goal = tf.stack([start['goal']]*(horizon+1), 0)
-      seq['feat'] = tf.concat([seq['feat'], goal], -1)
+      seq['feat'] = (seq['feat'], goal)
+      if not self.config.proj_goal:
+        seq['feat'] = tf.concat(seq['feat'], -1)
     if 'discount' in self.heads:
       disc = self.heads['discount'](seq['feat']).mean()
       if is_terminal is not None:
@@ -172,7 +186,10 @@ class WorldModel(common.Module):
         true_first *= self.config.discount
         disc = tf.concat([true_first[None], disc[1:]], 0)
     else:
-      disc = self.config.discount * tf.ones(seq['feat'].shape[:-1])
+      if self.config.goal_conditioned and self.config.proj_goal:
+        disc = self.config.discount * tf.ones(seq['feat'][0].shape[:-1])
+      else:
+        disc = self.config.discount * tf.ones(seq['feat'].shape[:-1])
     seq['discount'] = disc
     # Shift discount factors because they imply whether the following state
     # will be valid, not whether the current state is valid.
@@ -232,10 +249,11 @@ class ActorCritic(common.Module):
     if self.config.actor_grad == 'auto':
       self.config = self.config.update({
           'actor_grad': 'reinforce' if discrete else 'dynamics'})
-    self.actor = common.MLP(act_space.shape[0], **self.config.actor)
-    self.critic = common.MLP([], **self.config.critic)
+    arch = common.GoalCondMLP if (self.config.goal_conditioned and self.config.proj_goal) else common.MLP
+    self.actor = arch(act_space.shape[0], **self.config.actor)
+    self.critic = arch([], **self.config.critic)
     if self.config.slow_target:
-      self._target_critic = common.MLP([], **self.config.critic)
+      self._target_critic = arch([], **self.config.critic)
       self._updates = tf.Variable(0, tf.int64)
     else:
       self._target_critic = self.critic
@@ -281,11 +299,17 @@ class ActorCritic(common.Module):
     # value prediction and one because the corresponding action does not lead
     # anywhere anymore. One target is lost at the start of the trajectory
     # because the initial state comes from the replay buffer.
-    policy = self.actor(tf.stop_gradient(seq['feat'][:-2]))
+    if self.config.goal_conditioned and self.config.proj_goal:
+      policy = self.actor(tuple([tf.stop_gradient(ss[:-2]) for ss in seq['feat']]))
+    else:
+      policy = self.actor(tf.stop_gradient(seq['feat'][:-2]))
     if self.config.actor_grad == 'dynamics':
       objective = target[1:]
     elif self.config.actor_grad == 'reinforce':
-      baseline = self._target_critic(seq['feat'][:-2]).mode()
+      if self.config.goal_conditioned and self.config.proj_goal:
+        baseline = self._target_critic(tuple([ss[:-2] for ss in seq['feat']])).mode()
+      else:
+        baseline = self._target_critic(seq['feat'][:-2]).mode()
       advantage = tf.stop_gradient(target[1:] - baseline)
       action = tf.stop_gradient(seq['action'][1:-1])
       objective = policy.log_prob(action) * advantage
@@ -314,7 +338,10 @@ class ActorCritic(common.Module):
     # Weights:    [ 1]  [w1]  [w2]   w3
     # Targets:    [t0]  [t1]  [t2]
     # Loss:        l0    l1    l2
-    dist = self.critic(seq['feat'][:-1])
+    if self.config.goal_conditioned and self.config.proj_goal:
+      dist = self.critic(tuple([ss[:-1] for ss in seq['feat']]))
+    else:
+      dist = self.critic(seq['feat'][:-1])
     target = tf.stop_gradient(target)
     weight = tf.stop_gradient(seq['weight'])
     critic_loss = -(dist.log_prob(target) * weight[:-1]).mean()
