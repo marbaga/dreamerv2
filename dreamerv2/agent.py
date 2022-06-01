@@ -37,6 +37,8 @@ class Agent(common.Module):
     latent, _ = self.wm.rssm.obs_step(
         latent, action, embed, obs['is_first'], sample)
     feat = self.wm.rssm.get_feat(latent)
+    if self.config.goal_conditioned:
+      feat = tf.concat([feat, tf.cast(obs['goal'], feat.dtype)], -1)
     if mode == 'eval':
       actor = self._task_behavior.actor(feat)
       action = actor.mode()
@@ -60,6 +62,8 @@ class Agent(common.Module):
     state, outputs, mets = self.wm.train(data, state)
     metrics.update(mets)
     start = outputs['post']
+    if self.config.goal_conditioned:
+      start.update({'goal': tf.cast(data['goal'], start['deter'].dtype)})
     reward = lambda seq: self.wm.heads['reward'](seq['feat']).mode()
     metrics.update(self._task_behavior.train(
         self.wm, start, data['is_terminal'], reward))
@@ -115,6 +119,8 @@ class WorldModel(common.Module):
     for name, head in self.heads.items():
       grad_head = (name in self.config.grad_heads)
       inp = feat if grad_head else tf.stop_gradient(feat)
+      if self.config.goal_conditioned and name in ['reward', 'discount']:
+        inp = tf.concat([inp, tf.cast(data['goal'], inp.dtype)], -1)
       out = head(inp)
       dists = out if isinstance(out, dict) else {name: out}
       for key, dist in dists.items():
@@ -137,15 +143,26 @@ class WorldModel(common.Module):
     flatten = lambda x: x.reshape([-1] + list(x.shape[2:]))
     start = {k: flatten(v) for k, v in start.items()}
     start['feat'] = self.rssm.get_feat(start)
-    start['action'] = tf.zeros_like(policy(start['feat']).mode())
+    if self.config.goal_conditioned:
+      p_input = tf.concat([start['feat'], start['goal']], -1)
+    else:
+      p_input = start['feat']
+    start['action'] = tf.zeros_like(policy(p_input).mode())
     seq = {k: [v] for k, v in start.items()}
     for _ in range(horizon):
-      action = policy(tf.stop_gradient(seq['feat'][-1])).sample()
+      if self.config.goal_conditioned:
+        p_input = tf.concat([seq['feat'][-1], start['goal']], -1)
+      else:
+        p_input = seq['feat'][-1]
+      action = policy(tf.stop_gradient(p_input)).sample()
       state = self.rssm.img_step({k: v[-1] for k, v in seq.items()}, action)
       feat = self.rssm.get_feat(state)
       for key, value in {**state, 'action': action, 'feat': feat}.items():
         seq[key].append(value)
     seq = {k: tf.stack(v, 0) for k, v in seq.items()}
+    if self.config.goal_conditioned:
+      goal = tf.stack([start['goal']]*(horizon+1), 0)
+      seq['feat'] = tf.concat([seq['feat'], goal], -1)
     if 'discount' in self.heads:
       disc = self.heads['discount'](seq['feat']).mean()
       if is_terminal is not None:

@@ -43,6 +43,9 @@ def main():
   print(config, '\n')
   print('Logdir', logdir)
 
+  if config.goal_conditioned:
+    config = config.update({'encoder': {'mlp_keys': 'state'}, 'decoder': {'mlp_keys': 'state'}})
+
   import tensorflow as tf
   tf.config.experimental_run_functions_eagerly(not config.jit)
   message = 'No GPU found. To actually train on CPU remove this assert.'
@@ -197,3 +200,7 @@ def main():
 
 if __name__ == '__main__':
   main()
+
+
+# TODO: separate state, goal, make sure goal does not get encoded by mlp in world model. only use goal as conditioning to policy, value function
+# if self.goal_conditioned override cnn, mlp keys, then edit actor and value (make sure they have access to data)

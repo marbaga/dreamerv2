@@ -249,16 +249,21 @@ class PlayRoom:
                                 goal_object_options=[0,1,2,3], drawers_options=[1,2,3], **env_kwargs)
     self.state_keys = ['observation_grasp', 'desired_goal']
     self.shape = (sum([self._env.observation_space[k].shape[0] for k in self.state_keys]),)
+    self.goal_conditioned = args.goal_conditioned
 
   @property
   def obs_space(self):
-    return {
+    obs_space = {
         'state': gym.spaces.Box(-np.inf, np.inf, self.shape, dtype=np.float32),
         'reward': gym.spaces.Box(-np.inf, np.inf, (), dtype=np.float32),
         'is_first': gym.spaces.Box(0, 1, (), dtype=np.bool),
         'is_last': gym.spaces.Box(0, 1, (), dtype=np.bool),
         'is_terminal': gym.spaces.Box(0, 1, (), dtype=np.bool),
     }
+    if self.goal_conditioned:
+      obs_space['state'] = gym.spaces.Box(-np.inf, np.inf, self._env.observation_space['observation_grasp'].shape, dtype=np.float32)
+      obs_space['goal'] = gym.spaces.Box(-np.inf, np.inf, self._env.observation_space['desired_goal'].shape, dtype=np.float32)
+    return obs_space
 
   @property
   def act_space(self):
@@ -278,24 +283,30 @@ class PlayRoom:
       9: 'gr'
     }
     state, reward, done, info = self._env.step(map_actions[action['action']])
-    return {
+    obs = {
         'state': np.concatenate([state[k] for k in self.state_keys]),
         'reward': reward,
         'is_first': False,
         'is_last': done,
         'is_terminal': done,
     }
+    if self.goal_conditioned:
+      obs.update({'state': state['observation_grasp'], 'goal': state['desired_goal']})
+    return obs
 
   def reset(self):
     with self.LOCK:
       state = self._env.reset()
-    return {
+    obs = {
         'state': np.concatenate([state[k] for k in self.state_keys]),
         'reward': 0.0,
         'is_first': True,
         'is_last': False,
         'is_terminal': False,
     }
+    if self.goal_conditioned:
+      obs.update({'state': state['observation_grasp'], 'goal': state['desired_goal']})
+    return obs
 
   def close(self):
     return self._env.close()
