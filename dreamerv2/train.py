@@ -6,6 +6,8 @@ import pathlib
 import re
 import sys
 import warnings
+import time
+from cluster import cluster_main, announce_early_results, announce_fraction_finished, exit_for_resume
 
 try:
   import rich.traceback
@@ -26,16 +28,22 @@ import ruamel.yaml as yaml
 import agent
 import common
 
+MAX_CLUSTER_TIME = 60 * 60 * 5  # 5 hours
 
-def main():
+@cluster_main
+def main(train_params, working_dir, **kwargs):
 
   configs = yaml.safe_load((
       pathlib.Path(sys.argv[0]).parent / 'configs.yaml').read_text())
   parsed, remaining = common.Flags(configs=['defaults']).parse(known_only=True)
+  parsed = parsed.update({'configs': ('defaults', train_params.pop('configs'))})
   config = common.Config(configs['defaults'])
   for name in parsed.configs:
     config = config.update(configs[name])
-  config = common.Flags(config).parse(remaining)
+  config = config.update(train_params)
+  config = config.update({'logdir': working_dir})
+  # remaining only contains arguments from cluster_utils, can ignore
+  # config = common.Flags(config).parse(remaining)
 
   logdir = pathlib.Path(config.logdir).expanduser()
   logdir.mkdir(parents=True, exist_ok=True)
@@ -183,6 +191,7 @@ def main():
       logger.write(fps=True)
   train_driver.on_step(train_step)
 
+  start_time = time.time()
   while step < config.steps:
     logger.write()
     print('Start evaluation.')
@@ -191,12 +200,18 @@ def main():
     print('Start training.')
     train_driver(train_policy, steps=config.eval_every)
     agnt.save(logdir / 'variables.pkl')
+    announce_fraction_finished(int(step) / float(config.steps))
+    announce_early_results(logger.get_current_results())
+    should_exit = (time.time() - start_time) > MAX_CLUSTER_TIME        
+    if should_exit:
+      exit_for_resume()
   for env in train_envs + eval_envs:
     try:
       env.close()
     except Exception:
       pass
 
+  return logger.get_current_results()
 
 if __name__ == '__main__':
   main()

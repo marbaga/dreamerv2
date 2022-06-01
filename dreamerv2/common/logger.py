@@ -15,6 +15,7 @@ class Logger:
     self._last_step = None
     self._last_time = None
     self._metrics = []
+    self._current_results = {}
 
   def add(self, mapping, prefix=None):
     step = int(self._step) * self._multiplier
@@ -42,6 +43,7 @@ class Logger:
       return
     for output in self._outputs:
       output(self._metrics)
+    self._update_current_results()
     self._metrics.clear()
 
   def _compute_fps(self):
@@ -55,6 +57,12 @@ class Logger:
     self._last_time += duration
     self._last_step = step
     return steps / duration
+  
+  def _update_current_results(self):
+    self._current_results.update({k: float(v) for _, k, v in self._metrics if len(v.shape) == 0})
+
+  def get_current_results(self):
+    return self._current_results.copy()
 
 
 class TerminalOutput:

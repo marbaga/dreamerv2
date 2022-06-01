@@ -1,0 +1,7 @@
+{
+  "train_params": {
+    "configs": "playroom"
+  },
+  "working_dir": "results/{__timestamp__}"
+}
+

@@ -1,0 +1,42 @@
+{
+    "optimization_procedure_name": "test_grid",
+    "results_dir": "/home/mbagatella/results/dreamerv2",
+    "run_in_working_dir": false,
+    "working_dir":"results/{__timestamp__}",
+    "git_params": {
+        "branch": "main",
+        "commit": null
+    },
+    "script_relative_path": "dreamerv2/train.py",
+    "environment_setup": {
+        "virtual_env_path": "/home/mbagatella/.local/share/virtualenvs/dreamerv2-Bl-jTN4e",
+        "pre_job_script": "setup.sh"
+    },
+    "cluster_requirements": {
+        "request_cpus": 8,
+        "request_gpus": 1,
+        "cuda_requirement": ">6.0",
+        "memory_in_mb": 200000,
+        "gpu_memory_in_mb": 15000,
+        "bid": 5
+    },
+    "remove_jobs_dir": false,
+    "restarts": 1,
+    "fixed_params": {
+        "__import_promise__": "default_params.json"
+    },
+   "hyperparam_list": [
+      {
+        "param": "replay.minlen",
+        "values": [5,10,15]
+      },
+      {
+        "param": "replay.maxlen",
+        "values": [10, 15, 30]
+      },
+      {
+        "param": "dataset.length",
+        "values": [5, 10, 15]
+      }
+   ]
+}

@@ -114,9 +114,7 @@ playroom:
   eval_every: 1e4
   prefill: 2000  # try 1000
   clip_rewards: identity # try 'tanh'
-  pred_discount: False # try True
   replay.prioritize_ends: False # try True
-  grad_heads: [decoder, reward] # try adding 'discount'
   rssm: {hidden: 200, deter: 200} # try 600, 600
   model_opt.lr: 3e-4  # or 2e-4 for atari
   actor_opt.lr: 8e-5  # or 4e-5 in atari
@@ -128,16 +126,34 @@ playroom:
   log_video: False
   goal_conditioned: False
   proj_goal: False
-  # TODO: some episodes are len 4, lower minlen
-  # expl_behavior: PlanToExplore
-  # discount: 0.999  # to try from atari
-  # loss_scales.kl: 0.1  # to try from atari
-  # loss_scales.discount: 5.0  # to try from atari
-  # pretrain: 100  # try from dm_control
 
-  # 2^7: prefill, clip_rewards, prioritize_ends, rssm size, kl.free (1 vs 0), goal conditioned, minlen(3 vs 5)
-  # tune lrs, entropy, batch size, discount, loss scales (8)
-  # try plantoexplore
+
+# 2x rssm: {hidden: 200, deter: 200} vs {hidden: 600, deter: 600}
+# 2x replay.prioritize_ends: False vs True
+# 2x actor_ent: 1e-4  vs 1e-3
+# 2x kl.free: 0.0 vs 1.0
+# 2x discount: 0.999 vs 0.99
+# 2x imag_horizon: 15 5
+# 2x pred_discount: False # try True
+# grad_heads: [decoder, reward] # try adding 'discount'
+
+# run the same w/ 
+# 3x loss_scales.kl: 0.1 vs 1.0 vs 5.0
+# 3x loss_scales.discount: 0.1 vs 0.1 vs 5.0
+
+# run the same w/ 
+# model_opt.lr: 3e-4  # or 2e-4 for atari
+# actor_opt.lr: 8e-5  # or 4e-5 in atari
+# critic_opt.lr: 8e-5  # or 1e-4 in atari
+
+# not important
+# goal_conditioned: False
+# proj_goal: False
+# prefill: 2000  # try 1000
+# clip_rewards: identity # try 'tanh'
+# log_video: False
+# expl_behavior: PlanToExplore
+# pretrain: 100  # try from dm_control
 
 crafter:
 
