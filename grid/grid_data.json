@@ -1,5 +1,5 @@
 {
-    "optimization_procedure_name": "test_grid",
+    "optimization_procedure_name": "grid_data_10",
     "results_dir": "/home/mbagatella/results/dreamerv2",
     "run_in_working_dir": false,
     "working_dir":"results/{__timestamp__}",
@@ -27,16 +27,32 @@
     },
    "hyperparam_list": [
       {
-        "param": "replay.minlen",
-        "values": [5,10,15]
+        "param": "train_params.replay.prioritize_ends",
+        "values": [False, True]
       },
       {
-        "param": "replay.maxlen",
-        "values": [10, 15, 30]
+        "param": ["train_params.rssm.hidden", "train_params.rssm.deter"],
+        "values": [[200, 200], [600, 600]]
       },
       {
-        "param": "dataset.length",
-        "values": [5, 10, 15]
+        "param": "train_params.actor_ent",
+        "values": [1e-3, 1e-4]
+      },
+      {
+        "param": ["train_params.replay.minlen", "train_params.dataset.length"],
+        "values": [[5, 5], [15, 15]]
+      },
+      {
+        "param": ["train_params.pred_discount", "train_params.grad_heads"],
+        "values": [[False, ["decoder", "reward"]], [True, ["decoder", "reward", "discount"]]]
+      },
+      {
+        "param": "train_params.imag_horizon",
+        "values": [5, 15]
+      },
+      {
+        "param": ["train_params.goal_conditioned", "train_params.proj_goal"],
+        "values": [[False, False], [True, False], [True, True]]
       }
    ]
 }

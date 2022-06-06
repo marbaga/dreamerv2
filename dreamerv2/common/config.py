@@ -106,6 +106,7 @@ class Config(dict):
     result = self._flat.copy()
     inputs = self._flatten(dict(*args, **kwargs))
     for key, new in inputs.items():
+      key=key.replace("\\", "")
       if self.IS_PATTERN.match(key):
         pattern = re.compile(key)
         keys = {k for k in result if pattern.match(k)}

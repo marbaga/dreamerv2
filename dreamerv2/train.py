@@ -33,6 +33,7 @@ MAX_CLUSTER_TIME = 60 * 60 * 5  # 5 hours
 @cluster_main
 def main(train_params, working_dir, **kwargs):
 
+  assert len(kwargs) == 1  # check that cluster parameters were passed correctly
   configs = yaml.safe_load((
       pathlib.Path(sys.argv[0]).parent / 'configs.yaml').read_text())
   parsed, remaining = common.Flags(configs=['defaults']).parse(known_only=True)
